@@ -1,0 +1,69 @@
+# This is a basic workflow that is manually triggered
+
+name: create GBST DMZ account
+run-name: Run by @${{ github.actor }} for ${{ github.event.inputs.ticket_id }}
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+    # Inputs the workflow accepts.
+    inputs:
+      first_name:
+        description: 'Please enter first name'
+        required: true
+        type: string
+      last_name:
+        description: 'Please enter last name'
+        required: true
+        type: string
+      ticket_id:
+        description: 'Please enter the Jira ticket number'
+        required: true
+        type: string
+      primary_group:
+        description: 'Please enter primary group'
+        required: true
+        type: string
+      
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+env:
+  PASS: ${{ secrets.PASS }}
+  USER: ${{ secrets.USER }}
+      
+jobs:
+  check-ADGroup:
+    runs-on: self-hosted
+    steps:
+      - name: Check if group exists
+        run: |
+          $password = ConvertTo-SecureString $env:PASS -AsPlainText -Force
+          $credential = New-Object System.Management.Automation.PSCredential ("$env:USER", $password)
+          
+          $primaryGroup = "${{ github.event.inputs.primary_group }}"
+          Invoke-Command -ComputerName psvau4wmgt101.cmc.dmz -ScriptBlock {
+            param($group)
+            Get-ADGroup $group
+          } -ArgumentList $primaryGroup -Authentication CredSSP -Credential $credential      
+          
+  create-GBST-acc:
+    needs: check-ADGroup  # Job will not run without check-ADGroup
+    runs-on: self-hosted
+    steps:
+      - name: Run PowerShell Script Remotely
+        run: |
+            $password = ConvertTo-SecureString $env:PASS -AsPlainText -Force
+            $credential = New-Object System.Management.Automation.PSCredential ("$env:USER", $password)
+  
+            # Define variables from inputs
+            $firstName = "${{ github.event.inputs.first_name }}"
+            $lastName = "${{ github.event.inputs.last_name }}"
+            $ticketID = "${{ github.event.inputs.ticket_id }}"
+            $primaryGroup = "${{ github.event.inputs.primary_group }}"
+
+            # Pass variables to script remotely
+            Invoke-Command -ComputerName psvau4wmgt101.cmc.dmz -ScriptBlock {
+                param($firstName, $lastName, $ticketID, $primaryGroup)
+                & "C:\Users\adm-clucas\Desktop\createDmzGbstAcc.ps1" -firstName $firstName -lastName $lastName -desc $ticketID -primaryGroup $primaryGroup
+            } -Authentication CredSSP -Credential $credential -ArgumentList $firstName, $lastName, $ticketID, $primaryGroup
